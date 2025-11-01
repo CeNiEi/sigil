@@ -7,23 +7,84 @@ use wgpu::{
     Device, Face, FragmentState, FrontFace, IndexFormat, MultisampleState,
     PipelineCompilationOptions, PipelineLayoutDescriptor, PolygonMode, PrimitiveState,
     PrimitiveTopology, Queue, RenderPass, RenderPipeline, RenderPipelineDescriptor, ShaderStages,
-    TextureFormat, VertexState, include_wgsl,
+    TextureFormat, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
+    include_wgsl,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
 use crate::{
     boundary::Boundary,
     global::Global,
-    utils::{BindGroupData, BufferData},
+    utils::{BindGroupData, InstanceBufferData, VertexBufferData},
+    vertex::Vertex,
 };
 
 pub(crate) struct Sine {
     pub(crate) boundary: Boundary,
-    pub(crate) wave_data: SineWaveData,
+    pub(crate) wave_data: Waves,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct Waves(pub(crate) Vec<SineWaveData>);
+
+impl Waves {
+    fn create_instance_buffer_data(&self, device: &Device) -> InstanceBufferData {
+        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Wave Vertex Buffer"),
+            contents: bytemuck::cast_slice(&self.0),
+            usage: BufferUsages::VERTEX,
+        });
+
+        const F32X2_SIZE: u64 = std::mem::size_of::<[f32; 2]>() as u64;
+
+        const F32_SIZE: u64 = std::mem::size_of::<f32>() as u64;
+
+        let vertex_buffer_layout = VertexBufferLayout {
+            array_stride: std::mem::size_of::<SineWaveData>() as u64,
+            step_mode: VertexStepMode::Instance,
+            attributes: &[
+                VertexAttribute {
+                    format: VertexFormat::Float32x2,
+                    shader_location: 1,
+                    offset: 0,
+                },
+                VertexAttribute {
+                    format: VertexFormat::Float32,
+                    shader_location: 2,
+                    offset: F32X2_SIZE,
+                },
+                VertexAttribute {
+                    format: VertexFormat::Float32,
+                    shader_location: 3,
+                    offset: F32X2_SIZE + F32_SIZE,
+                },
+                VertexAttribute {
+                    format: VertexFormat::Float32,
+                    shader_location: 4,
+                    offset: F32X2_SIZE + 2 * F32_SIZE,
+                },
+                VertexAttribute {
+                    format: VertexFormat::Float32,
+                    shader_location: 5,
+                    offset: F32X2_SIZE + 3 * F32_SIZE,
+                },
+                VertexAttribute {
+                    format: VertexFormat::Float32,
+                    shader_location: 6,
+                    offset: F32X2_SIZE + 4 * F32_SIZE,
+                },
+            ],
+        };
+
+        InstanceBufferData {
+            vertex_buffer,
+            vertex_buffer_layout,
+        }
+    }
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(Copy, Clone, Pod, Zeroable, Debug)]
 pub(crate) struct SineWaveData {
     pub(crate) center: [f32; 2],
 
@@ -99,10 +160,11 @@ impl SineWaveData {
 }
 
 pub(crate) struct SinePipeline {
-    pub(crate) boundary_buffer_data: BufferData,
-    pub(crate) sinewave_bind_group_data: BindGroupData,
-    pub(crate) global_bind_group_data: BindGroupData,
-    pub(crate) global: Global,
+    boundary_buffer_data: VertexBufferData,
+    sinewave_instance_buffer_data: InstanceBufferData,
+    global_bind_group_data: BindGroupData,
+    global: Global,
+    sine: Sine,
     pipeline: RenderPipeline,
 }
 
@@ -116,18 +178,15 @@ impl SinePipeline {
         let shader_module = device.create_shader_module(include_wgsl!("sine.wgsl"));
 
         let global_bind_group_data = global.create_bind_group_data(device);
-        let sinewave_bind_group_data = sine.wave_data.create_bind_group_data(device);
+        let sinewave_instance_buffer_data = sine.wave_data.create_instance_buffer_data(device);
 
         let layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Sine Pipeline Layout"),
-            bind_group_layouts: &[
-                &global_bind_group_data.layout,
-                &sinewave_bind_group_data.layout,
-            ],
+            bind_group_layouts: &[&global_bind_group_data.layout],
             ..Default::default()
         });
 
-        let boundary_buffer_data = sine.boundary.create_buffer_data(device);
+        let boundary_buffer_data = sine.boundary.create_vertex_buffer_data(device);
 
         let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Sine Pipeline"),
@@ -135,7 +194,10 @@ impl SinePipeline {
                 module: &shader_module,
                 entry_point: Some("vs_main"),
                 compilation_options: PipelineCompilationOptions::default(),
-                buffers: &[boundary_buffer_data.vertex_buffer_layout.clone()],
+                buffers: &[
+                    boundary_buffer_data.vertex_buffer_layout.clone(),
+                    sinewave_instance_buffer_data.vertex_buffer_layout.clone(),
+                ],
             },
             fragment: Some(FragmentState {
                 module: &shader_module,
@@ -143,7 +205,7 @@ impl SinePipeline {
                 compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(ColorTargetState {
                     format: texture_format,
-                    blend: Some(BlendState::REPLACE),
+                    blend: Some(BlendState::ALPHA_BLENDING),
                     write_mask: ColorWrites::ALL,
                 })],
             }),
@@ -163,9 +225,10 @@ impl SinePipeline {
 
         Self {
             global,
+            sine,
             boundary_buffer_data,
             global_bind_group_data,
-            sinewave_bind_group_data,
+            sinewave_instance_buffer_data,
             pipeline,
         }
     }
@@ -173,13 +236,16 @@ impl SinePipeline {
     pub(crate) fn set_render_pass(&self, render_pass: &mut RenderPass<'_>) {
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_vertex_buffer(0, self.boundary_buffer_data.vertex_buffer.slice(..));
+        render_pass.set_vertex_buffer(
+            1,
+            self.sinewave_instance_buffer_data.vertex_buffer.slice(..),
+        );
         render_pass.set_index_buffer(
             self.boundary_buffer_data.index_buffer.slice(..),
             IndexFormat::Uint16,
         );
         render_pass.set_bind_group(0, &self.global_bind_group_data.bind_group, &[]);
-        render_pass.set_bind_group(1, &self.sinewave_bind_group_data.bind_group, &[]);
-        render_pass.draw_indexed(0..6, 0, 0..1);
+        render_pass.draw_indexed(0..6, 0, 0..self.sine.wave_data.0.len() as u32);
     }
 
     pub(crate) fn update_global_frame(&mut self, queue: &Queue) {

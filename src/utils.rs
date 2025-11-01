@@ -6,8 +6,13 @@ pub(crate) struct BindGroupData {
     pub(crate) bind_group: BindGroup,
 }
 
-pub(crate) struct BufferData {
+pub(crate) struct VertexBufferData {
     pub(crate) vertex_buffer: Buffer,
     pub(crate) index_buffer: Buffer,
+    pub(crate) vertex_buffer_layout: VertexBufferLayout<'static>,
+}
+
+pub(crate) struct InstanceBufferData {
+    pub(crate) vertex_buffer: Buffer,
     pub(crate) vertex_buffer_layout: VertexBufferLayout<'static>,
 }

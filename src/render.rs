@@ -12,7 +12,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{
     boundary::Boundary,
     global::Global,
-    pipelines::sine::{Sine, SinePipeline, SineWaveData},
+    pipelines::sine::{Sine, SinePipeline, SineWaveData, Waves},
     vertex::Vertex,
 };
 
@@ -46,6 +46,7 @@ impl Render {
 
         let (device, queue) = adapter
             .request_device(&DeviceDescriptor {
+                label: Some("Device Descriptor"),
                 ..Default::default()
             })
             .await?;
@@ -88,7 +89,13 @@ impl Render {
                 Vertex::new(1., -1.),
                 Vertex::new(1., 1.),
             ),
-            wave_data: SineWaveData::new([0.5, 0.5], 0.35, 0.36, 0.05, 8., 0.005),
+            wave_data: Waves(vec![
+                SineWaveData::new([0.5, 0.5], 0.05, 0.06, 0.05, 8., -0.005),
+                SineWaveData::new([0.5, 0.5], 0.20, 0.21, 0.05, 8., -0.005),
+                SineWaveData::new([0.5, 0.5], 0.35, 0.36, 0.05, 8., 0.005),
+                SineWaveData::new([0.5, 0.5], 0.50, 0.51, 0.05, 8., -0.005),
+                SineWaveData::new([0.5, 0.5], 0.65, 0.66, 0.05, 8., 0.005),
+            ]),
         };
 
         let global = Global::new(800, 600);
@@ -125,13 +132,16 @@ impl Render {
 
         let surface_texture = self.surface.get_current_texture()?;
 
-        let texture_view = surface_texture
-            .texture
-            .create_view(&TextureViewDescriptor::default());
+        let texture_view = surface_texture.texture.create_view(&TextureViewDescriptor {
+            label: Some("Texture View Descriptor"),
+            ..Default::default()
+        });
 
         let mut encoder = self
             .device
-            .create_command_encoder(&CommandEncoderDescriptor::default());
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("Command Encoder"),
+            });
 
         {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -139,9 +149,9 @@ impl Render {
                     view: &texture_view,
                     ops: Operations {
                         load: LoadOp::Clear(Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
                             a: 1.0,
                         }),
                         store: StoreOp::Store,
@@ -149,6 +159,7 @@ impl Render {
                     resolve_target: None,
                     depth_slice: None,
                 })],
+                label: Some("Render Pass"),
                 ..Default::default()
             });
 

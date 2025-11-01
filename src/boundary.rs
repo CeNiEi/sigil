@@ -4,7 +4,7 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
 };
 
-use crate::{utils::BufferData, vertex::Vertex};
+use crate::{utils::VertexBufferData, vertex::Vertex};
 
 pub(crate) struct Boundary {
     inner: [Vertex; 4],
@@ -25,7 +25,7 @@ impl Boundary {
         [0, 1, 3, 1, 2, 3]
     }
 
-    pub(crate) fn create_buffer_data(&self, device: &Device) -> BufferData {
+    pub(crate) fn create_vertex_buffer_data(&self, device: &Device) -> VertexBufferData {
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Boundary Vertex Buffer"),
             contents: bytemuck::bytes_of(&self.vertices()),
@@ -48,7 +48,7 @@ impl Boundary {
             }],
         };
 
-        BufferData {
+        VertexBufferData {
             vertex_buffer,
             vertex_buffer_layout,
             index_buffer,
