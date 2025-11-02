@@ -7,12 +7,13 @@ use wgpu::{
     Surface, SurfaceConfiguration, TextureUsages,
     wgt::{CommandEncoderDescriptor, TextureViewDescriptor},
 };
-use winit::{dpi::PhysicalSize, window::Window};
+use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
 use crate::{
     boundary::Boundary,
     global::Global,
     pipelines::sine::{Sine, SinePipeline, SineWaveData, Waves},
+    ui::Ui,
     vertex::Vertex,
 };
 
@@ -23,6 +24,7 @@ pub(crate) struct Render {
     window: Arc<Window>,
     config: SurfaceConfiguration,
     sine_pipeline: SinePipeline,
+    ui: Ui,
 }
 
 impl Render {
@@ -82,6 +84,8 @@ impl Render {
 
         surface.configure(&device, &config);
 
+        let ui = Ui::new(&device, config.format, &window);
+
         let sine = Sine {
             boundary: Boundary::new(
                 Vertex::new(-1., 1.),
@@ -89,13 +93,7 @@ impl Render {
                 Vertex::new(1., -1.),
                 Vertex::new(1., 1.),
             ),
-            wave_data: Waves(vec![
-                SineWaveData::new([0.5, 0.5], 0.05, 0.06, 0.05, 8., -0.005),
-                SineWaveData::new([0.5, 0.5], 0.20, 0.21, 0.05, 8., -0.005),
-                SineWaveData::new([0.5, 0.5], 0.35, 0.36, 0.05, 8., 0.005),
-                SineWaveData::new([0.5, 0.5], 0.50, 0.51, 0.05, 8., -0.005),
-                SineWaveData::new([0.5, 0.5], 0.65, 0.66, 0.05, 8., 0.005),
-            ]),
+            wave_data: Waves(vec![SineWaveData::default()]),
         };
 
         let global = Global::new(800, 600);
@@ -103,6 +101,7 @@ impl Render {
         let sine_pipeline = SinePipeline::new(sine, global, config.format, &device);
 
         Ok(Self {
+            ui,
             surface,
             device,
             sine_pipeline,
@@ -125,10 +124,16 @@ impl Render {
         }
     }
 
+    pub(crate) fn handle_ui_inputs(&mut self, event: &WindowEvent) {
+        self.ui.handle_input(&self.window, event);
+    }
+
     pub(crate) fn render(&mut self) -> Result<()> {
         self.window.request_redraw();
 
         self.sine_pipeline.update_global_frame(&self.queue);
+        self.sine_pipeline
+            .update_sine_wave_data(std::iter::once(&self.ui.sine_wave_data), &self.queue);
 
         let surface_texture = self.surface.get_current_texture()?;
 
@@ -165,6 +170,14 @@ impl Render {
 
             self.sine_pipeline.set_render_pass(&mut render_pass);
         }
+
+        self.ui.render(
+            &self.window,
+            &self.device,
+            &self.queue,
+            &texture_view,
+            &mut encoder,
+        );
 
         self.queue.submit(std::iter::once(encoder.finish()));
         surface_texture.present();

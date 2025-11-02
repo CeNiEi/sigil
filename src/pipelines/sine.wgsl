@@ -2,7 +2,7 @@ struct VertexInput {
     @location(0) position: vec2<f32>,
     @location(1) center: vec2<f32>,
     @location(2) inner_radius: f32,
-    @location(3) outer_radius: f32,
+    @location(3) thickness: f32,
     @location(4) amplitude: f32,
     @location(5) cycles: f32,
     @location(6) speed: f32,
@@ -12,7 +12,7 @@ struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(1) center: vec2<f32>,
     @location(2) inner_radius: f32,
-    @location(3) outer_radius: f32,
+    @location(3) thickness: f32,
     @location(4) amplitude: f32,
     @location(5) cycles: f32,
     @location(6) speed: f32,
@@ -32,11 +32,10 @@ fn vs_main(
     output.cycles = input.cycles;
     output.amplitude = input.amplitude;
     output.inner_radius = input.inner_radius;
-    output.outer_radius = input.outer_radius;
+    output.thickness = input.thickness;
 
     return output;
 }
-
 
 struct Global {
     resolution: vec2<f32>,
@@ -61,9 +60,8 @@ fn fs_main(
 
     let theta = atan2(pos.y, pos.x);
 
-    let first_phase = vertex_output.cycles * (theta - vertex_output.speed * global.phase);
-    let first_outer_wave = vertex_output.outer_radius + vertex_output.amplitude * sin(first_phase);
-    let first_inner_wave = vertex_output.inner_radius + vertex_output.amplitude * sin(first_phase);
+    let phase = vertex_output.cycles * (theta - vertex_output.speed * global.phase);
+    let inner_wave = vertex_output.inner_radius + vertex_output.amplitude * sin(phase);
 
 
     let dist = length(pos);
@@ -76,7 +74,7 @@ fn fs_main(
         0.5 + 0.5 * sin(6.2831 * hue + 4.188)
     );
 
-    if dist >= first_inner_wave && dist < first_outer_wave {
+    if dist >= inner_wave && dist < inner_wave + vertex_output.thickness {
         return vec4<f32>(color, 1.0);
     } else {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);

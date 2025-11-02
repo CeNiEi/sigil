@@ -8,6 +8,7 @@ mod boundary;
 mod global;
 mod pipelines;
 mod render;
+mod ui;
 mod utils;
 mod vertex;
 

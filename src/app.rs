@@ -38,30 +38,26 @@ impl ApplicationHandler for App {
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        let Self::Initialized { render } = self else {
+            return;
+        };
+
+        render.handle_ui_inputs(&event);
+
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
             WindowEvent::Resized(physical_size) => {
-                let Self::Initialized { render } = self else {
-                    return;
-                };
-
                 render.resize(physical_size);
             }
 
-            WindowEvent::RedrawRequested => {
-                let Self::Initialized { render } = self else {
-                    return;
-                };
-
-                match render.render() {
-                    Ok(()) => {}
-                    Err(_) => {
-                        event_loop.exit();
-                    }
+            WindowEvent::RedrawRequested => match render.render() {
+                Ok(()) => {}
+                Err(_) => {
+                    event_loop.exit();
                 }
-            }
+            },
             _ => (),
         }
     }
