@@ -1,3 +1,5 @@
+use std::array;
+
 use egui::{Context, ViewportId};
 use egui_wgpu::{Renderer, RendererOptions, ScreenDescriptor};
 use egui_winit::State;
@@ -10,7 +12,19 @@ use winit::{event::WindowEvent, window::Window};
 pub(crate) struct Ui {
     renderer: Renderer,
     state: State,
-    pub(crate) sine_wave_data: UiSineWaveData,
+    pub(crate) waves: UiWaves,
+}
+
+pub(crate) struct UiWaves(pub(crate) [UiSineWaveData; 8]);
+
+impl Default for UiWaves {
+    fn default() -> Self {
+        let mut waves = UiWaves(array::from_fn(|_| UiSineWaveData::default()));
+
+        waves.0[0].init = true;
+
+        waves
+    }
 }
 
 pub(crate) struct UiSineWaveData {
@@ -20,6 +34,7 @@ pub(crate) struct UiSineWaveData {
     pub(crate) thickness: f32,
     pub(crate) cycles: f32,
     pub(crate) speed: f32,
+    pub(crate) init: bool,
 }
 
 impl Default for UiSineWaveData {
@@ -31,6 +46,7 @@ impl Default for UiSineWaveData {
             thickness: 0.01,
             cycles: 8.,
             speed: 0.005,
+            init: false,
         }
     }
 }
@@ -39,12 +55,14 @@ impl Ui {
     pub(crate) fn new(device: &Device, format: TextureFormat, window: &Window) -> Self {
         let renderer = Renderer::new(device, format, RendererOptions::default());
         let context = Context::default();
+
         let state = State::new(context.clone(), ViewportId::ROOT, window, None, None, None);
+        let waves = UiWaves::default();
 
         Self {
             renderer,
             state,
-            sine_wave_data: UiSineWaveData::default(),
+            waves,
         }
     }
 
@@ -119,39 +137,69 @@ impl Ui {
             .movable(true)
             .show(self.state.egui_ctx(), |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Center: ");
-                    ui.add(
-                        egui::Slider::new(&mut self.sine_wave_data.center[0], 0.0..=1.0).text("X"),
-                    );
-                    ui.add(
-                        egui::Slider::new(&mut self.sine_wave_data.center[1], 0.0..=1.0).text("Y"),
-                    );
+                    if let Some(pos) = self.waves.0.iter().position(|wave_data| !wave_data.init) {
+                        let response = ui.button("Add Wave");
+                        if response.clicked() {
+                            self.waves.0[pos].init = true;
+                        }
+                    };
+
+                    ui.separator();
                 });
-                ui.separator();
-                ui.add(
-                    egui::Slider::new(&mut self.sine_wave_data.amplitude, 0.0..=0.1)
-                        .text("Amplitude"),
-                );
-                ui.separator();
-                ui.add(
-                    egui::Slider::new(&mut self.sine_wave_data.inner_radius, 0.0..=1.)
-                        .text("Inner Radius"),
-                );
-                ui.separator();
-                ui.add(
-                    egui::Slider::new(&mut self.sine_wave_data.thickness, 0.01..=0.1)
-                        .text("Thickness"),
-                );
 
                 ui.separator();
-                ui.add(
-                    egui::Slider::new(&mut self.sine_wave_data.cycles, 1.0..=16.)
-                        .step_by(1.)
-                        .text("Cycles"),
-                );
 
-                ui.separator();
-                ui.add(egui::Slider::new(&mut self.sine_wave_data.speed, -0.1..=0.1).text("Speed"));
+                self.waves
+                    .0
+                    .iter_mut()
+                    .filter(|wave_data| wave_data.init)
+                    .for_each(|sine_wave_data| {
+                        ui.horizontal(|ui| {
+                            ui.label("Center: ");
+                            ui.add(
+                                egui::Slider::new(&mut sine_wave_data.center[0], 0.0..=1.0)
+                                    .text("X"),
+                            );
+                            ui.add(
+                                egui::Slider::new(&mut sine_wave_data.center[1], 0.0..=1.0)
+                                    .text("Y"),
+                            );
+                        });
+                        ui.separator();
+
+                        ui.add(
+                            egui::Slider::new(&mut sine_wave_data.amplitude, 0.0..=0.1)
+                                .text("Amplitude"),
+                        );
+                        ui.separator();
+
+                        ui.add(
+                            egui::Slider::new(&mut sine_wave_data.inner_radius, 0.0..=1.)
+                                .text("Inner Radius"),
+                        );
+                        ui.separator();
+
+                        ui.add(
+                            egui::Slider::new(&mut sine_wave_data.thickness, 0.01..=0.1)
+                                .text("Thickness"),
+                        );
+
+                        ui.separator();
+
+                        ui.add(
+                            egui::Slider::new(&mut sine_wave_data.cycles, 1.0..=16.)
+                                .step_by(1.)
+                                .text("Cycles"),
+                        );
+
+                        ui.separator();
+
+                        ui.add(
+                            egui::Slider::new(&mut sine_wave_data.speed, -0.1..=0.1).text("Speed"),
+                        );
+                        ui.separator();
+                        ui.separator();
+                    });
             });
     }
 

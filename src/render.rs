@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{array, sync::Arc};
 
 use anyhow::{Result, anyhow};
 use wgpu::{
@@ -93,7 +93,7 @@ impl Render {
                 Vertex::new(1., -1.),
                 Vertex::new(1., 1.),
             ),
-            wave_data: Waves(vec![SineWaveData::default()]),
+            wave_data: Waves::default(),
         };
 
         let global = Global::new(800, 600);
@@ -133,7 +133,7 @@ impl Render {
 
         self.sine_pipeline.update_global_frame(&self.queue);
         self.sine_pipeline
-            .update_sine_wave_data(std::iter::once(&self.ui.sine_wave_data), &self.queue);
+            .update_sine_wave_data(&self.ui.waves.0, &self.queue);
 
         let surface_texture = self.surface.get_current_texture()?;
 

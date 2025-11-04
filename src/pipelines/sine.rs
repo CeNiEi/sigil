@@ -1,4 +1,4 @@
-use std::{num::NonZero, slice::Iter};
+use std::{array, num::NonZero, slice::Iter};
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::{
@@ -26,7 +26,17 @@ pub(crate) struct Sine {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Waves(pub(crate) Vec<SineWaveData>);
+pub(crate) struct Waves(pub(crate) [SineWaveData; 8]);
+
+impl Default for Waves {
+    fn default() -> Self {
+        let mut waves = Waves(array::from_fn(|_| SineWaveData::default()));
+
+        waves.0[0].init = 1;
+
+        waves
+    }
+}
 
 impl Waves {
     fn create_instance_buffer_data(&self, device: &Device) -> InstanceBufferData {
@@ -39,6 +49,8 @@ impl Waves {
         const F32X2_SIZE: u64 = std::mem::size_of::<[f32; 2]>() as u64;
 
         const F32_SIZE: u64 = std::mem::size_of::<f32>() as u64;
+
+        const U32_SIZE: u64 = std::mem::size_of::<u32>() as u64;
 
         let vertex_buffer_layout = VertexBufferLayout {
             array_stride: std::mem::size_of::<SineWaveData>() as u64,
@@ -74,6 +86,11 @@ impl Waves {
                     shader_location: 6,
                     offset: F32X2_SIZE + 4 * F32_SIZE,
                 },
+                VertexAttribute {
+                    format: VertexFormat::Uint8,
+                    shader_location: 7,
+                    offset: F32X2_SIZE + 5 * F32_SIZE,
+                },
             ],
         };
 
@@ -96,6 +113,7 @@ pub(crate) struct SineWaveData {
     pub(crate) cycles: f32,
 
     pub(crate) speed: f32,
+    pub(crate) init: u32,
     _padding: f32,
 }
 
@@ -108,6 +126,7 @@ impl Default for SineWaveData {
             thickness: 0.01,
             cycles: 8.,
             speed: 0.005,
+            init: 0,
             _padding: 0.,
         }
     }
@@ -124,6 +143,7 @@ impl SineWaveData {
         cycles: f32,
 
         speed: f32,
+        init: bool,
     ) -> Self {
         Self {
             speed,
@@ -132,6 +152,7 @@ impl SineWaveData {
             inner_radius,
             thickness,
             amplitude,
+            init: init as u32,
             _padding: 0.,
         }
     }
@@ -274,7 +295,7 @@ impl SinePipeline {
 
     pub(crate) fn update_sine_wave_data<'a>(
         &'a mut self,
-        sine_wave_data: impl IntoIterator<Item = &'a UiSineWaveData>,
+        sine_wave_data: &[UiSineWaveData],
         queue: &Queue,
     ) {
         self.sine
@@ -282,6 +303,7 @@ impl SinePipeline {
             .0
             .iter_mut()
             .zip(sine_wave_data)
+            .filter(|(_, new_data)| new_data.init)
             .for_each(|(old_data, new_data)| {
                 old_data.center = new_data.center;
                 old_data.amplitude = new_data.amplitude;
@@ -290,6 +312,7 @@ impl SinePipeline {
                 old_data.cycles = new_data.cycles;
                 old_data.speed = new_data.speed;
                 old_data.center = new_data.center;
+                old_data.init = new_data.init as u32;
             });
 
         queue.write_buffer(

@@ -6,6 +6,7 @@ struct VertexInput {
     @location(4) amplitude: f32,
     @location(5) cycles: f32,
     @location(6) speed: f32,
+    @location(7) init: u32
 }
 
 struct VertexOutput {
@@ -16,6 +17,7 @@ struct VertexOutput {
     @location(4) amplitude: f32,
     @location(5) cycles: f32,
     @location(6) speed: f32,
+    @location(7) init: u32
 }
 
 @vertex
@@ -33,6 +35,7 @@ fn vs_main(
     output.amplitude = input.amplitude;
     output.inner_radius = input.inner_radius;
     output.thickness = input.thickness;
+    output.init = input.init;
 
     return output;
 }
@@ -45,11 +48,14 @@ struct Global {
 @group(0) @binding(0)
 var<uniform> global: Global;
 
-
 @fragment
 fn fs_main(
     vertex_output: VertexOutput
 ) -> @location(0) vec4<f32> {
+    if vertex_output.init == 0u {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+
     let frag_coord = vertex_output.position;
 
     let uv = frag_coord.xy / global.resolution;
