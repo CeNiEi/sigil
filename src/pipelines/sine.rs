@@ -303,7 +303,6 @@ impl SinePipeline {
             .0
             .iter_mut()
             .zip(sine_wave_data)
-            .filter(|(_, new_data)| new_data.init)
             .for_each(|(old_data, new_data)| {
                 old_data.center = new_data.center;
                 old_data.amplitude = new_data.amplitude;

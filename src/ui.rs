@@ -138,68 +138,69 @@ impl Ui {
             .show(self.state.egui_ctx(), |ui| {
                 ui.horizontal(|ui| {
                     if let Some(pos) = self.waves.0.iter().position(|wave_data| !wave_data.init) {
-                        let response = ui.button("Add Wave");
-                        if response.clicked() {
+                        if ui.button("Add Wave").clicked() {
                             self.waves.0[pos].init = true;
                         }
-                    };
-
-                    ui.separator();
+                    }
                 });
 
                 ui.separator();
 
-                self.waves
+                for (i, sine_wave_data) in self
+                    .waves
                     .0
                     .iter_mut()
                     .filter(|wave_data| wave_data.init)
-                    .for_each(|sine_wave_data| {
-                        ui.horizontal(|ui| {
-                            ui.label("Center: ");
-                            ui.add(
-                                egui::Slider::new(&mut sine_wave_data.center[0], 0.0..=1.0)
-                                    .text("X"),
-                            );
-                            ui.add(
-                                egui::Slider::new(&mut sine_wave_data.center[1], 0.0..=1.0)
-                                    .text("Y"),
-                            );
+                    .enumerate()
+                {
+                    egui::CollapsingHeader::new(format!("Wave {}", i + 1))
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            ui.group(|ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label("Center:");
+                                    ui.add(
+                                        egui::Slider::new(&mut sine_wave_data.center[0], 0.0..=1.0)
+                                            .text("X"),
+                                    );
+                                    ui.add(
+                                        egui::Slider::new(&mut sine_wave_data.center[1], 0.0..=1.0)
+                                            .text("Y"),
+                                    );
+                                });
+
+                                ui.add(
+                                    egui::Slider::new(&mut sine_wave_data.amplitude, 0.0..=0.1)
+                                        .text("Amplitude"),
+                                );
+                                ui.add(
+                                    egui::Slider::new(&mut sine_wave_data.inner_radius, 0.0..=1.0)
+                                        .text("Inner Radius"),
+                                );
+                                ui.add(
+                                    egui::Slider::new(&mut sine_wave_data.thickness, 0.01..=0.1)
+                                        .text("Thickness"),
+                                );
+                                ui.add(
+                                    egui::Slider::new(&mut sine_wave_data.cycles, 1.0..=16.0)
+                                        .step_by(1.0)
+                                        .text("Cycles"),
+                                );
+                                ui.add(
+                                    egui::Slider::new(&mut sine_wave_data.speed, -0.1..=0.1)
+                                        .text("Speed"),
+                                );
+
+                                ui.horizontal(|ui| {
+                                    if ui.button("Remove").clicked() {
+                                        sine_wave_data.init = false;
+                                    }
+                                });
+                            });
                         });
-                        ui.separator();
 
-                        ui.add(
-                            egui::Slider::new(&mut sine_wave_data.amplitude, 0.0..=0.1)
-                                .text("Amplitude"),
-                        );
-                        ui.separator();
-
-                        ui.add(
-                            egui::Slider::new(&mut sine_wave_data.inner_radius, 0.0..=1.)
-                                .text("Inner Radius"),
-                        );
-                        ui.separator();
-
-                        ui.add(
-                            egui::Slider::new(&mut sine_wave_data.thickness, 0.01..=0.1)
-                                .text("Thickness"),
-                        );
-
-                        ui.separator();
-
-                        ui.add(
-                            egui::Slider::new(&mut sine_wave_data.cycles, 1.0..=16.)
-                                .step_by(1.)
-                                .text("Cycles"),
-                        );
-
-                        ui.separator();
-
-                        ui.add(
-                            egui::Slider::new(&mut sine_wave_data.speed, -0.1..=0.1).text("Speed"),
-                        );
-                        ui.separator();
-                        ui.separator();
-                    });
+                    ui.separator();
+                }
             });
     }
 
