@@ -50,8 +50,6 @@ impl Waves {
 
         const F32_SIZE: u64 = std::mem::size_of::<f32>() as u64;
 
-        const U32_SIZE: u64 = std::mem::size_of::<u32>() as u64;
-
         let vertex_buffer_layout = VertexBufferLayout {
             array_stride: std::mem::size_of::<SineWaveData>() as u64,
             step_mode: VertexStepMode::Instance,

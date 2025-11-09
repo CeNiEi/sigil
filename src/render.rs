@@ -2,17 +2,21 @@ use std::{array, sync::Arc};
 
 use anyhow::{Result, anyhow};
 use wgpu::{
-    Backends, Color, Device, DeviceDescriptor, Instance, InstanceDescriptor, LoadOp, Operations,
-    Queue, RenderPassColorAttachment, RenderPassDescriptor, RequestAdapterOptions, StoreOp,
-    Surface, SurfaceConfiguration, TextureUsages,
-    wgt::{CommandEncoderDescriptor, TextureViewDescriptor},
+    Backends, Color, Device, DeviceDescriptor, Extent3d, Instance, InstanceDescriptor, LoadOp,
+    Operations, Queue, RenderPassColorAttachment, RenderPassDescriptor, RequestAdapterOptions,
+    StoreOp, Surface, SurfaceConfiguration, Texture, TextureDimension, TextureFormat,
+    TextureUsages, TextureView,
+    wgt::{CommandEncoderDescriptor, TextureDescriptor, TextureViewDescriptor},
 };
 use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
 use crate::{
     boundary::Boundary,
     global::Global,
-    pipelines::sine::{Sine, SinePipeline, SineWaveData, Waves},
+    pipelines::{
+        post::PostPipeline,
+        sine::{Sine, SinePipeline, SineWaveData, Waves},
+    },
     ui::Ui,
     vertex::Vertex,
 };
@@ -24,6 +28,9 @@ pub(crate) struct Render {
     window: Arc<Window>,
     config: SurfaceConfiguration,
     sine_pipeline: SinePipeline,
+    post_pipeline: PostPipeline,
+    off_screen_texture: Texture,
+    off_screen_texture_view: TextureView,
     ui: Ui,
 }
 
@@ -84,6 +91,9 @@ impl Render {
 
         surface.configure(&device, &config);
 
+        let (off_screen_texture, off_screen_texture_view) =
+            Self::create_off_screen_texture(config.width, config.height, config.format, &device);
+
         let ui = Ui::new(&device, config.format, &window);
 
         let sine = Sine {
@@ -100,15 +110,50 @@ impl Render {
 
         let sine_pipeline = SinePipeline::new(sine, global, config.format, &device);
 
+        let post_pipeline =
+            PostPipeline::new(&off_screen_texture_view, config.format, global, &device);
+
         Ok(Self {
             ui,
+            off_screen_texture,
             surface,
             device,
             sine_pipeline,
             queue,
             window,
             config,
+            off_screen_texture_view,
+            post_pipeline,
         })
+    }
+
+    fn create_off_screen_texture(
+        width: u32,
+        height: u32,
+        format: TextureFormat,
+        device: &Device,
+    ) -> (Texture, TextureView) {
+        let texture = device.create_texture(&TextureDescriptor {
+            label: Some("Off Screen Texture"),
+            size: Extent3d {
+                width: width,
+                height: height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: format,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        let view = texture.create_view(&TextureViewDescriptor {
+            label: Some("Off Streen Texture View"),
+            ..Default::default()
+        });
+
+        (texture, view)
     }
 
     pub(crate) fn resize(&mut self, new_size: PhysicalSize<u32>) {
@@ -121,6 +166,24 @@ impl Render {
                 new_size.height,
                 &self.queue,
             );
+            self.post_pipeline.update_global_resolution(
+                new_size.width,
+                new_size.height,
+                &self.queue,
+            );
+
+            let (off_screen_texture, off_screen_texture_view) = Self::create_off_screen_texture(
+                new_size.width,
+                new_size.height,
+                self.config.format,
+                &self.device,
+            );
+
+            self.off_screen_texture = off_screen_texture;
+            self.off_screen_texture_view = off_screen_texture_view;
+
+            self.post_pipeline
+                .update_off_screen_bindgroup(&self.off_screen_texture_view, &self.device);
         }
     }
 
@@ -151,14 +214,10 @@ impl Render {
         {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &texture_view,
+                    view: &self.off_screen_texture_view,
+
                     ops: Operations {
-                        load: LoadOp::Clear(Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
+                        load: LoadOp::Clear(Color::BLACK),
                         store: StoreOp::Store,
                     },
                     resolve_target: None,
@@ -169,6 +228,24 @@ impl Render {
             });
 
             self.sine_pipeline.set_render_pass(&mut render_pass);
+        }
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &texture_view,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color::BLACK),
+                        store: StoreOp::Store,
+                    },
+                    resolve_target: None,
+                    depth_slice: None,
+                })],
+                label: Some("Post Render Pass"),
+                ..Default::default()
+            });
+
+            self.post_pipeline.set_render_pass(&mut render_pass);
         }
 
         self.ui.render(
